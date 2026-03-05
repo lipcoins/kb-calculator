@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 
-// [원본 유지] 카테고리 정의
+// 1. 카테고리 정의 (순정 유지)
 const CATEGORIES = [
   { key: "gas",      label: "⛽ 주유소",       color: "#FF6B35" },
   { key: "mart",     label: "🛒 대형마트",      color: "#A78BFA" },
@@ -15,11 +15,11 @@ const CATEGORIES = [
 const ALL_KEYS = ["gas", "mart", "shopping", "telecom", "delivery", "water", "other"];
 
 const TIER_LIMITS = {
-  "40": { gas: 14000, mart: 15000, shopping: 15000, telecom: 10000, delivery: 10000, water: 10000, other: null },
-  "80": { gas: 24000, mart: 20000, shopping: 20000, telecom: 10000, delivery: 10000, water: 10000, other: null },
+  "40": { gas: 10000, mart: 15000, shopping: 15000, telecom: 10000, delivery: 10000, water: 10000, other: null },
+  "80": { gas: 20000, mart: 20000, shopping: 20000, telecom: 10000, delivery: 10000, water: 10000, other: null },
 };
 
-// [원본 유지] 데이터 빌드 로직
+// 2. 보조 함수 (순정 유지)
 function buildTotals(parsed) {
   const totals = {};
   let grand = 0;
@@ -30,20 +30,6 @@ function buildTotals(parsed) {
     grand += sum;
   }
   return { totals, grand };
-}
-
-function exportCSV(result) {
-  const rows = [["월", "전월실적구간", "카테고리", "가맹점", "적립금(P)"]];
-  for (const cat of CATEGORIES) {
-    for (const item of result.totals[cat.key]?.items || []) {
-      rows.push([result.month, result.tier + "만이상", cat.label, item.name, item.amount]);
-    }
-  }
-  const csv = "\uFEFF" + rows.map(r => r.join(",")).join("\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url; a.download = `KB_Biz_Titanium_${result.month}.csv`; a.click();
 }
 
 function TabBtn({ active, onClick, children }) {
@@ -72,7 +58,7 @@ export default function App() {
     return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
   });
 
-  // 🛠️ [최종 튜닝] KB Pay 실전 텍스트 파싱 엔진
+  // 🛠️ [정밀 튜닝] 주인님이 주신 실제 텍스트 구조 맞춤형 파서
   const analyze = () => {
     if (!textInput.trim()) return;
     setError(null);
@@ -82,30 +68,30 @@ export default function App() {
     let foundAny = false;
 
     for (let i = 0; i < lines.length; i++) {
-      // "적립 X,XXXP" 패턴을 찾습니다.
       if (lines[i].includes("적립") && lines[i].includes("P")) {
         const amountMatch = lines[i].match(/([\d,]+)/);
         if (amountMatch) {
           const amount = parseInt(amountMatch[0].replace(/,/g, ""), 10);
           
-          // KB Pay 복사본 특성상 가맹점명은 '적립' 라인에서 4줄 정도 위에 있습니다.
-          // 지능적으로 가맹점 후보를 역추적합니다.
-          let name = "기타 가맹점";
+          // 가맹점명을 찾기 위해 위로 역추적 (KB Pay 복사본 특화)
+          let name = "미분류 가맹점";
           for (let j = 1; j <= 5; j++) {
             const candidate = lines[i - j];
-            if (candidate && !candidate.includes("원") && !candidate.includes(":") && !candidate.includes("일시불") && !candidate.match(/^\d{2}월\d{2}일/)) {
-              name = candidate.replace("KB Pay", "").trim();
+            if (!candidate) continue;
+            // 금액, 시간, 카드명, 날짜 등이 아닌 줄을 가맹점명으로 인식
+            if (!candidate.includes("원") && !candidate.includes(":") && !candidate.includes("탄탄대로") && !candidate.match(/^\d{2}월\d{2}일/)) {
+              name = candidate.trim();
               break;
             }
           }
           foundAny = true;
 
-          // 정밀 키워드 분류 (주인님 맞춤형)
-          if (["주유", "SK", "GS", "에쓰", "오일"].some(k => name.includes(k))) parsed.gas.push({ name, amount });
-          else if (["이마트", "홈플러스", "롯데마트", "하나로", "식자재"].some(k => name.includes(k))) parsed.mart.push({ name, amount });
-          else if (["G마켓", "옥션", "11번가", "인터파크", "온스타일", "SSG", "KB제휴"].some(k => name.includes(k))) parsed.shopping.push({ name, amount });
-          else if (["SK브로드", "LiivM", "LGUPLUS", "LG유플", "SKT", "KT", "통신"].some(k => name.includes(k))) parsed.telecom.push({ name, amount });
-          else if (["우아한형", "배달의민족", "배민", "마켓컬리"].some(k => name.includes(k))) parsed.delivery.push({ name, amount });
+          // 정밀 키워드 분류
+          if (["주유", "SK", "GS", "오일"].some(k => name.includes(k))) parsed.gas.push({ name, amount });
+          else if (["이마트", "홈플러스", "롯데마트", "식자재"].some(k => name.includes(k))) parsed.mart.push({ name, amount });
+          else if (["G마켓", "옥션", "11번가", "온스타일", "SSG"].some(k => name.includes(k))) parsed.shopping.push({ name, amount });
+          else if (["브로드밴드", "LiivM", "LGUPLUS", "LG유플", "SKT", "KT"].some(k => name.includes(k))) parsed.telecom.push({ name, amount });
+          else if (["우아한형", "배달의민족", "마켓컬리"].some(k => name.includes(k))) parsed.delivery.push({ name, amount });
           else if (name.toLowerCase().includes("coway") || name.includes("코웨이")) parsed.water.push({ name, amount });
           else parsed.other.push({ name, amount });
         }
@@ -113,19 +99,13 @@ export default function App() {
     }
 
     if (!foundAny) {
-      setError("적립 내역을 찾을 수 없습니다. '적립 XXXP'가 포함된 내용을 붙여넣어주세요.");
+      setError("적립 내역을 찾을 수 없습니다. 형식을 확인해주세요.");
       return;
     }
 
     const { totals, grand } = buildTotals(parsed);
     setResult({ totals, grand, month, tier });
     setMainTab("result");
-  };
-
-  const saveHistory = () => {
-    if (!result) return;
-    setHistory(prev => [{ ...result }, ...prev.filter(h => h.month !== result.month)]);
-    alert("저장 완료!");
   };
 
   const effectiveGrand = result ? ALL_KEYS.reduce((acc, key) => {
@@ -141,8 +121,8 @@ export default function App() {
   return (
     <div style={{ minHeight: "100vh", background: "#0a0e1a", fontFamily: "'Noto Sans KR', sans-serif", color: "#e8eaf6" }}>
       <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=Bebas+Neue&display=swap" rel="stylesheet" />
-      
-      {/* Header - 원본 UI 보존 */}
+
+      {/* Header */}
       <div style={{ background: "linear-gradient(135deg, #1a237e 0%, #0d47a1 60%, #01579b 100%)", padding: "22px 20px 0", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
         <div style={{ maxWidth: 620, margin: "0 auto" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18 }}>
@@ -158,26 +138,37 @@ export default function App() {
       </div>
 
       <div style={{ maxWidth: 620, margin: "0 auto", padding: "22px 16px 56px" }}>
+
         {mainTab === "input" && (
           <div>
+            {/* 🛠️ [복구] 월 선택 드롭다운 */}
+            <div style={{ marginBottom: 16 }}>
+              <select value={month} onChange={e => setMonth(e.target.value)} style={{ width: "100%", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10, padding: "12px 14px", color: "#fff", fontSize: 16, outline: "none", appearance: "none" }}>
+                <option value="2026-03">2026년 3월</option>
+                <option value="2026-02">2026년 2월</option>
+                <option value="2026-01">2026년 1월</option>
+              </select>
+            </div>
+
             <div style={{ marginBottom: 20 }}>
               <div style={{ display: "flex", gap: 8 }}>
-                {["40", "80"].map(val => (
-                  <button key={val} onClick={() => setTier(val)} style={{ flex: 1, padding: "12px 8px", borderRadius: 12, border: "1px solid " + (tier === val ? "#FFD700" : "rgba(255,255,255,0.12)"), background: tier === val ? "rgba(255,215,0,0.12)" : "rgba(255,255,255,0.03)", color: tier === val ? "#FFD700" : "rgba(255,255,255,0.45)", fontWeight: 700 }}>{val}만 이상</button>
+                {[["40", "💳 전월 실적 40만 이상"], ["80", "💎 전월 실적 80만 이상"]].map(([val, label]) => (
+                  <button key={val} onClick={() => setTier(val)} style={{ flex: 1, padding: "12px 8px", borderRadius: 12, border: "1px solid " + (tier === val ? "#FFD700" : "rgba(255,255,255,0.12)"), background: tier === val ? "rgba(255,215,0,0.12)" : "rgba(255,255,255,0.03)", color: tier === val ? "#FFD700" : "rgba(255,255,255,0.45)", fontSize: 13, fontWeight: 700 }}>{label}</button>
                 ))}
               </div>
-              {/* 한도 그리드 UI */}
+              
+              {/* 🛠️ [수정] 한도 표시 (10,000 P 형식) */}
               <div style={{ marginTop: 10, background: "rgba(255,255,255,0.03)", borderRadius: 10, padding: "14px", display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-                {["gas", "mart", "shopping", "telecom", "delivery", "water"].map(key => (
-                  <div key={key} style={{ textAlign: "center", background: "rgba(255,255,255,0.04)", borderRadius: 8, padding: "8px" }}>
-                    <div style={{ fontSize: 10, opacity: 0.4 }}>{CATEGORIES.find(c => c.key === key).label}</div>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: "#FFD700" }}>{(TIER_LIMITS[tier][key] / 10000).toFixed(0)}만P</div>
+                {CATEGORIES.filter(c => c.key !== 'other').map(cat => (
+                  <div key={cat.key} style={{ textAlign: "center", background: "rgba(255,255,255,0.04)", borderRadius: 8, padding: "8px" }}>
+                    <div style={{ fontSize: 10, opacity: 0.4, marginBottom: 4 }}>{cat.label}</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "#FFD700" }}>{TIER_LIMITS[tier][cat.key].toLocaleString()} P</div>
                   </div>
                 ))}
               </div>
             </div>
 
-            <textarea value={textInput} onChange={e => setTextInput(e.target.value)} placeholder={"KB Pay 앱에서 이용내역을 통째로 복사해 붙여넣으세요..."} style={{ width: "100%", height: 280, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 14, padding: 16, color: "#fff", outline: "none", resize: "none" }} />
+            <textarea value={textInput} onChange={e => setTextInput(e.target.value)} placeholder={"KB Pay 내역을 붙여넣으세요..."} style={{ width: "100%", height: 250, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 14, padding: 16, color: "#fff", outline: "none", boxSizing: "border-box" }} />
             {error && <div style={{ color: "#ff8a80", fontSize: 13, marginTop: 10 }}>⚠️ {error}</div>}
             <button onClick={analyze} style={{ width: "100%", padding: 16, borderRadius: 14, background: "linear-gradient(135deg, #FFD700, #FFA000)", color: "#0a0e1a", fontWeight: 700, marginTop: 20, cursor: "pointer", border: "none" }}>✨ 적립금 분석하기</button>
           </div>
@@ -186,19 +177,21 @@ export default function App() {
         {mainTab === "result" && result && (
           <div>
             <div style={{ background: "linear-gradient(135deg, #1a237e, #0d47a1)", borderRadius: 18, padding: "24px", marginBottom: 20 }}>
-              <div style={{ fontSize: 11, opacity: 0.5 }}>{result.month} · {result.tier}만 실적 기준</div>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div style={{ fontFamily: "'Bebas Neue'", fontSize: 46, color: "#FFD700" }}>{effectiveGrand.toLocaleString()}<span style={{ fontSize: 22 }}>P</span></div>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button onClick={saveHistory} style={{ padding: "8px 12px", borderRadius: 8, background: "rgba(255,215,0,0.1)", color: "#FFD700", border: "1px solid #FFD700", fontSize: 12 }}>💾 저장</button>
-                  <button onClick={() => exportCSV(result)} style={{ padding: "8px 12px", borderRadius: 8, background: "rgba(255,255,255,0.1)", color: "#fff", border: "none", fontSize: 12 }}>📥 CSV</button>
+                <div>
+                   <div style={{ fontSize: 11, opacity: 0.5 }}>{result.month} · {result.tier}만 실적 기준</div>
+                   <div style={{ fontFamily: "'Bebas Neue'", fontSize: 46, color: "#FFD700" }}>{effectiveGrand.toLocaleString()}<span style={{ fontSize: 22 }}>P</span></div>
                 </div>
               </div>
             </div>
             
             <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 16, padding: 20, marginBottom: 20 }}>
-              <ResponsiveContainer width="100%" height={200}>
-                <PieChart><Pie data={chartData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value">{chartData.map((e, i) => <Cell key={i} fill={e.color} />)}</Pie><Tooltip /></PieChart>
+              <ResponsiveContainer width="100%" height={220}>
+                {chartType === "pie" ? (
+                  <PieChart><Pie data={chartData} cx="50%" cy="50%" innerRadius={60} outerRadius={90} dataKey="value">{chartData.map((e, i) => <Cell key={i} fill={e.color} />)}</Pie><Tooltip /></PieChart>
+                ) : (
+                  <BarChart data={chartData}><XAxis dataKey="name" tick={{ fontSize: 10, fill: "#fff" }} /><YAxis /><Bar dataKey="value">{chartData.map((e, i) => <Cell key={i} fill={e.color} />)}</Bar></BarChart>
+                )}
               </ResponsiveContainer>
             </div>
 
@@ -212,11 +205,6 @@ export default function App() {
                     <span style={{ fontWeight: 600 }}>{cat.label}</span>
                     <span style={{ fontFamily: "'Bebas Neue'", fontSize: 22, color: d.sum > (limit || Infinity) ? "#ff8a80" : cat.color }}>{Math.min(d.sum, limit || Infinity).toLocaleString()}P</span>
                   </div>
-                  {limit && (
-                    <div style={{ height: 5, background: "rgba(255,255,255,0.1)", borderRadius: 3, overflow: "hidden" }}>
-                      <div style={{ height: "100%", width: `${Math.min((d.sum/limit)*100, 100)}%`, background: d.sum > limit ? "#ff8a80" : cat.color }} />
-                    </div>
-                  )}
                   {d.items.map((it, i) => (
                     <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, opacity: 0.5, marginTop: 8 }}>
                       <span>{it.name}</span><span>{it.amount.toLocaleString()}P</span>
