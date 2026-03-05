@@ -208,4 +208,41 @@ export default function App() {
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   <button onClick={saveHistory} style={{ padding: "8px 14px", borderRadius: 10, background: "rgba(255,215,0,0.08)", color: "#FFD700", border: "1px solid rgba(255,215,0,0.35)", fontSize: 12 }}>💾 저장</button>
-                  <button onClick={() => exportCSV(result)} style={{ padding: "8px 14px", borderRadius: 10, background: "rgba(78,205,196,0.08)", color: "#4ECDC4", border: "1px solid rgba(78,205,1
+                  <button onClick={() => exportCSV(result)} style={{ padding: "8px 14px", borderRadius: 10, background: "rgba(78,205,196,0.08)", color: "#4ECDC4", border: "1px solid rgba(78,205,196,0.35)", fontSize: 12 }}>📥 CSV</button>
+                </div>
+              </div>
+            </div>
+
+            {CATEGORIES.map(cat => {
+              const d = result.totals[cat.key];
+              if (!d || d.sum === 0) return null;
+              const limit = TIER_LIMITS[result.tier][cat.key];
+              const pct = limit ? Math.min((d.sum / limit) * 100, 100) : 100;
+              return (
+                <div key={cat.key} style={{ background: "rgba(255,255,255,0.04)", borderRadius: 13, padding: "14px 16px", marginBottom: 10 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                    <div style={{ fontSize: 14, fontWeight: 600 }}>{cat.label}</div>
+                    <div style={{ fontFamily: "'Bebas Neue'", fontSize: 22, color: d.sum > limit ? "#ff8a80" : cat.color }}>{Math.min(d.sum, limit || Infinity).toLocaleString()}P</div>
+                  </div>
+                  {limit && (
+                    <div style={{ marginBottom: 10 }}>
+                      <div style={{ height: 5, background: "rgba(255,255,255,0.08)", borderRadius: 3, overflow: "hidden" }}>
+                        <div style={{ height: "100%", width: pct + "%", background: d.sum > limit ? "#ff8a80" : cat.color, transition: "width 0.5s" }} />
+                      </div>
+                      <div style={{ fontSize: 10, opacity: 0.3, marginTop: 3 }}>{d.sum.toLocaleString()}P / {limit.toLocaleString()}P 한도</div>
+                    </div>
+                  )}
+                  {d.items.map((it, i) => (
+                    <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, opacity: 0.6, padding: "4px 0", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+                      <span>{it.name}</span><span>{it.amount.toLocaleString()}P</span>
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
