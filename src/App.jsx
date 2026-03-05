@@ -1,14 +1,14 @@
 import { useState } from "react";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 
-// [원본 유지] 카테고리 정의
+// [순정 유지] 카테고리 정의
 const CATEGORIES = [
   { key: "gas",      label: "⛽ 주유소",       color: "#FF6B35" },
   { key: "mart",     label: "🛒 대형마트",      color: "#A78BFA" },
   { key: "shopping", label: "🛍️ 온라인 쇼핑몰", color: "#4ECDC4" },
   { key: "telecom",  label: "📱 통신/기타",     color: "#45B7D1" },
   { key: "delivery", label: "🍔 배달/외식",     color: "#FFAA00" },
-  { key: "water",    label: "💧 정수기",       color: "#60A5FA" },
+  { key: "water",    label: "💧 정수기",       color: "#60A5FA" }, // [추가] 정수기 카테고리
   { key: "other",    label: "🔹 기타",          color: "#9E9E9E" },
 ];
 
@@ -19,7 +19,7 @@ const TIER_LIMITS = {
   "80": { gas: 24000, mart: 20000, shopping: 20000, telecom: 10000, delivery: 10000, water: 10000, other: null },
 };
 
-// [원본 유지] 데이터 빌드 로직
+// [순정 유지] 데이터 빌드 로직
 function buildTotals(parsed) {
   const totals = {};
   let grand = 0;
@@ -72,7 +72,7 @@ export default function App() {
     return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
   });
 
-  // 🛠️ [엔진 보정] 잡음을 제거하고 가맹점명+사용금액을 정확히 추출
+  // 🛠️ [엔진 보정] 가맹점명+사용금액 추출 및 "정수기" 키워드 적용
   const analyze = () => {
     if (!textInput.trim()) return;
     setError(null);
@@ -89,13 +89,12 @@ export default function App() {
           let name = "기타 가맹점";
           let usedAmount = "";
 
-          // 역추적 파서: 무의미한 단어(일시불 등)를 건너뛰고 진짜 이름을 찾음
           for (let j = 1; j <= 10; j++) {
             const cand = lines[i - j];
             if (!cand) continue;
             if (cand.includes("원") && !usedAmount) { usedAmount = cand.trim(); }
             if (!cand.includes("원") && !cand.includes(":") && !cand.match(/^\d{2}월\d{2}일/) && 
-                !["일시불", "전표매입", "탄탄대로", "Biz", "티타늄", "마스터", "Master", "할부"].some(k => cand.includes(k))) {
+                !["일시불", "전표매입", "탄탄대로", "Biz", "티타늄", "마스터", "할부"].some(k => cand.includes(k))) {
               name = cand.replace("KB Pay", "").trim();
               break;
             }
@@ -109,7 +108,7 @@ export default function App() {
           else if (["G마켓", "옥션", "11번가", "인터파크", "온스타일", "SSG"].some(k => name.includes(k))) parsed.shopping.push({ name: displayName, amount });
           else if (["SK브로드", "LiivM", "LGUPLUS", "LG유플", "SKT", "KT"].some(k => name.includes(k))) parsed.telecom.push({ name: displayName, amount });
           else if (["우아한형", "배달의민족", "마켓컬리"].some(k => name.includes(k))) parsed.delivery.push({ name: displayName, amount });
-          else if (name.toLowerCase().includes("coway") || name.includes("코웨이")) parsed.water.push({ name: displayName, amount });
+          else if (name.toLowerCase().includes("coway") || name.includes("코웨이")) parsed.water.push({ name: displayName, amount }); // [수정] 정수기 키워드
           else parsed.other.push({ name: displayName, amount });
         }
       }
@@ -137,15 +136,11 @@ export default function App() {
     return acc + (limit ? Math.min(sum, limit) : sum);
   }, 0) : 0;
 
-  const chartData = result ? CATEGORIES.filter(c => result.totals[c.key]?.sum > 0).map(c => ({
-    name: c.label, value: result.totals[c.key].sum, color: c.color,
-  })) : [];
-
   return (
     <div style={{ minHeight: "100vh", background: "#0a0e1a", fontFamily: "'Noto Sans KR', sans-serif", color: "#e8eaf6" }}>
       <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=Bebas+Neue&display=swap" rel="stylesheet" />
       
-      {/* [순정] Header */}
+      {/* Header - 원본 UI 보존 */}
       <div style={{ background: "linear-gradient(135deg, #1a237e 0%, #0d47a1 60%, #01579b 100%)", padding: "22px 20px 0", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
         <div style={{ maxWidth: 620, margin: "0 auto" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18 }}>
@@ -195,7 +190,7 @@ export default function App() {
           </div>
         )}
 
-        {/* [순정 유지 + 요청 표기 반영] RESULT TAB */}
+        {/* [순정 유지] RESULT TAB */}
         {mainTab === "result" && result && (
           <div>
             <div style={{ background: "linear-gradient(135deg, #1a237e, #0d47a1)", borderRadius: 18, padding: "24px", marginBottom: 20 }}>
@@ -210,13 +205,8 @@ export default function App() {
                 </div>
               </div>
             </div>
-
-            {/* [순정 레이아웃 보존] 차트 영역 */}
-            <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 16, padding: 20, marginBottom: 20 }}>
-              <ResponsiveContainer width="100%" height={220}>
-                <PieChart><Pie data={chartData} cx="50%" cy="50%" innerRadius={60} outerRadius={90} dataKey="value">{chartData.map((e, i) => <Cell key={i} fill={e.color} />)}</Pie><Tooltip /></PieChart>
-              </ResponsiveContainer>
-            </div>
+            
+            {/* [삭제] 다이어그램(차트) 영역이 성공적으로 제거되었습니다 */}
             
             {/* 🛠️ [튜닝 3] 결과값 표시 형식 수정 (한도P / 얻은P) */}
             {CATEGORIES.map(cat => {
