@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 
-// [순정 유지] 카테고리 정의
+// [원본 유지] 카테고리 정의
 const CATEGORIES = [
   { key: "gas",      label: "⛽ 주유소",       color: "#FF6B35" },
   { key: "mart",     label: "🛒 대형마트",      color: "#A78BFA" },
@@ -15,11 +15,11 @@ const CATEGORIES = [
 const ALL_KEYS = ["gas", "mart", "shopping", "telecom", "delivery", "water", "other"];
 
 const TIER_LIMITS = {
-  "40": { gas: 10000, mart: 15000, shopping: 15000, telecom: 10000, delivery: 10000, water: 10000, other: null },
-  "80": { gas: 20000, mart: 20000, shopping: 20000, telecom: 10000, delivery: 10000, water: 10000, other: null },
+  "40": { gas: 14000, mart: 15000, shopping: 15000, telecom: 10000, delivery: 10000, water: 10000, other: null },
+  "80": { gas: 24000, mart: 20000, shopping: 20000, telecom: 10000, delivery: 10000, water: 10000, other: null },
 };
 
-// [순정 유지] 데이터 빌드 로직
+// [원본 유지] 데이터 빌드 로직
 function buildTotals(parsed) {
   const totals = {};
   let grand = 0;
@@ -67,8 +67,12 @@ export default function App() {
   const [error, setError] = useState(null);
   const [history, setHistory] = useState([]);
   const [chartType, setChartType] = useState("pie");
-  const [month, setMonth] = useState("2026-01");
+  const [month, setMonth] = useState(() => {
+    const d = new Date();
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
+  });
 
+  // 🛠️ [엔진 보정] 잡음을 제거하고 가맹점명+사용금액을 정확히 추출
   const analyze = () => {
     if (!textInput.trim()) return;
     setError(null);
@@ -82,24 +86,28 @@ export default function App() {
         const amountMatch = lines[i].match(/([\d,]+)/);
         if (amountMatch) {
           const amount = parseInt(amountMatch[0].replace(/,/g, ""), 10);
-          let name = "가맹점명 확인불가";
+          let name = "기타 가맹점";
           let usedAmount = "";
+
+          // 역추적 파서: 무의미한 단어(일시불 등)를 건너뛰고 진짜 이름을 찾음
           for (let j = 1; j <= 10; j++) {
             const cand = lines[i - j];
             if (!cand) continue;
             if (cand.includes("원") && !usedAmount) { usedAmount = cand.trim(); }
-            if (!cand.includes("원") && !cand.includes(":") && !cand.includes("(") && !cand.match(/^\d{2}월\d{2}일/)) {
+            if (!cand.includes("원") && !cand.includes(":") && !cand.match(/^\d{2}월\d{2}일/) && 
+                !["일시불", "전표매입", "탄탄대로", "Biz", "티타늄", "마스터", "Master", "할부"].some(k => cand.includes(k))) {
               name = cand.replace("KB Pay", "").trim();
               break;
             }
           }
+          
           const displayName = usedAmount ? `${name} ${usedAmount}` : name;
           foundAny = true;
 
-          if (["주유", "SK", "GS", "오일"].some(k => name.includes(k))) parsed.gas.push({ name: displayName, amount });
+          if (["주유", "SK", "GS", "에쓰", "오일"].some(k => name.includes(k))) parsed.gas.push({ name: displayName, amount });
           else if (["이마트", "홈플러스", "롯데마트", "하나로", "식자재"].some(k => name.includes(k))) parsed.mart.push({ name: displayName, amount });
           else if (["G마켓", "옥션", "11번가", "인터파크", "온스타일", "SSG"].some(k => name.includes(k))) parsed.shopping.push({ name: displayName, amount });
-          else if (["브로드밴드", "LiivM", "LGUPLUS", "LG유플", "SKT", "KT"].some(k => name.includes(k))) parsed.telecom.push({ name: displayName, amount });
+          else if (["SK브로드", "LiivM", "LGUPLUS", "LG유플", "SKT", "KT"].some(k => name.includes(k))) parsed.telecom.push({ name: displayName, amount });
           else if (["우아한형", "배달의민족", "마켓컬리"].some(k => name.includes(k))) parsed.delivery.push({ name: displayName, amount });
           else if (name.toLowerCase().includes("coway") || name.includes("코웨이")) parsed.water.push({ name: displayName, amount });
           else parsed.other.push({ name: displayName, amount });
@@ -108,7 +116,7 @@ export default function App() {
     }
 
     if (!foundAny) {
-      setError("적립 내역이 분석되지 않았습니다.");
+      setError("적립 내역을 찾을 수 없습니다.");
       return;
     }
 
@@ -136,8 +144,8 @@ export default function App() {
   return (
     <div style={{ minHeight: "100vh", background: "#0a0e1a", fontFamily: "'Noto Sans KR', sans-serif", color: "#e8eaf6" }}>
       <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=Bebas+Neue&display=swap" rel="stylesheet" />
-
-      {/* Header */}
+      
+      {/* [순정] Header */}
       <div style={{ background: "linear-gradient(135deg, #1a237e 0%, #0d47a1 60%, #01579b 100%)", padding: "22px 20px 0", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
         <div style={{ maxWidth: 620, margin: "0 auto" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18 }}>
@@ -155,10 +163,10 @@ export default function App() {
       <div style={{ maxWidth: 620, margin: "0 auto", padding: "22px 16px 56px" }}>
         {mainTab === "input" && (
           <div>
-            {/* 🛠️ [복구] 달력 아이콘 + 월 선택 UI */}
+            {/* 🛠️ [튜닝 1] 월 선택 UI 추가 (달력 아이콘) */}
             <div style={{ marginBottom: 16 }}>
               <div style={{ position: "relative", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 12, padding: "12px 16px", display: "flex", alignItems: "center" }}>
-                <span style={{ marginRight: 10, fontSize: 18 }}>📅</span>
+                <span style={{ marginRight: 12, fontSize: 18 }}>📅</span>
                 <input type="month" value={month} onChange={e => setMonth(e.target.value)} style={{ flex: 1, background: "transparent", border: "none", color: "#fff", fontSize: 16, outline: "none", colorScheme: "dark" }} />
               </div>
             </div>
@@ -170,14 +178,12 @@ export default function App() {
                 ))}
               </div>
               
-              {/* 🛠️ [수정] 한도 숫자 표기 (Max / Current 형태) */}
+              {/* 🛠️ [튜닝 2] 한도 숫자 10,000P 형식 표기 */}
               <div style={{ marginTop: 10, background: "rgba(255,255,255,0.03)", borderRadius: 10, padding: "14px", display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-                {CATEGORIES.filter(c => c.key !== 'other').map(cat => (
-                  <div key={cat.key} style={{ textAlign: "center", background: "rgba(255,255,255,0.04)", borderRadius: 8, padding: "8px" }}>
-                    <div style={{ fontSize: 10, opacity: 0.4, marginBottom: 4 }}>{cat.label}</div>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: "#FFD700" }}>
-                      {TIER_LIMITS[tier][cat.key].toLocaleString()}P / {result ? Math.min(result.totals[cat.key]?.sum || 0, TIER_LIMITS[tier][cat.key]).toLocaleString() : "0"}P
-                    </div>
+                {["gas", "mart", "shopping", "telecom", "delivery", "water"].map(key => (
+                  <div key={key} style={{ textAlign: "center", background: "rgba(255,255,255,0.04)", borderRadius: 8, padding: "8px" }}>
+                    <div style={{ fontSize: 10, opacity: 0.4 }}>{CATEGORIES.find(c => c.key === key).label}</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "#FFD700" }}>{TIER_LIMITS[tier][key].toLocaleString()}P</div>
                   </div>
                 ))}
               </div>
@@ -189,7 +195,7 @@ export default function App() {
           </div>
         )}
 
-        {/* [순정 유지] RESULT TAB */}
+        {/* [순정 유지 + 요청 표기 반영] RESULT TAB */}
         {mainTab === "result" && result && (
           <div>
             <div style={{ background: "linear-gradient(135deg, #1a237e, #0d47a1)", borderRadius: 18, padding: "24px", marginBottom: 20 }}>
@@ -204,7 +210,15 @@ export default function App() {
                 </div>
               </div>
             </div>
+
+            {/* [순정 레이아웃 보존] 차트 영역 */}
+            <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 16, padding: 20, marginBottom: 20 }}>
+              <ResponsiveContainer width="100%" height={220}>
+                <PieChart><Pie data={chartData} cx="50%" cy="50%" innerRadius={60} outerRadius={90} dataKey="value">{chartData.map((e, i) => <Cell key={i} fill={e.color} />)}</Pie><Tooltip /></PieChart>
+              </ResponsiveContainer>
+            </div>
             
+            {/* 🛠️ [튜닝 3] 결과값 표시 형식 수정 (한도P / 얻은P) */}
             {CATEGORIES.map(cat => {
               const d = result.totals[cat.key];
               if (!d || d.sum === 0) return null;
@@ -219,7 +233,7 @@ export default function App() {
                   </div>
                   {limit && (
                     <div style={{ height: 6, background: "rgba(255,255,255,0.1)", borderRadius: 3, overflow: "hidden", marginBottom: 10 }}>
-                      <div style={{ height: "100%", width: `${Math.min((d.sum/limit)*100, 100)}%`, background: d.sum > limit ? "#ff7b72" : cat.color }} />
+                      <div style={{ height: "100%", width: `${Math.min((d.sum/limit)*100, 100)}%`, background: d.sum > limit ? "#ff7b72" : cat.color, transition: "width 0.5s" }} />
                     </div>
                   )}
                   {d.items.map((it, i) => (
