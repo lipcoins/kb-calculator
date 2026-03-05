@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 
-// [원본 유지] 카테고리 정의
+// 1. 카테고리 정의 (순정 유지)
 const CATEGORIES = [
   { key: "gas",      label: "⛽ 주유소",       color: "#FF6B35" },
   { key: "mart",     label: "🛒 대형마트",      color: "#A78BFA" },
@@ -50,11 +50,9 @@ export default function App() {
   const [textInput, setTextInput] = useState("");
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
-  const [history, setHistory] = useState([]);
-  const [chartType, setChartType] = useState("pie");
   const [month, setMonth] = useState("2026-03");
 
-  // 🛠️ [무결성 튜닝] 실전 데이터 파싱 엔진
+  // 🛠️ [무결성 튜닝] 가맹점-포인트 역추적 엔진
   const analyze = () => {
     if (!textInput.trim()) return;
     setError(null);
@@ -64,25 +62,26 @@ export default function App() {
     let foundAny = false;
 
     for (let i = 0; i < lines.length; i++) {
+      // "적립" 라인을 찾습니다.
       if (lines[i].includes("적립") && lines[i].includes("P")) {
         const amountMatch = lines[i].match(/([\d,]+)/);
         if (amountMatch) {
           const amount = parseInt(amountMatch[0].replace(/,/g, ""), 10);
           
-          let name = "가맹점명 확인불가";
-          // 위로 최대 10줄을 훑으며 가장 적합한 가맹점명을 찾습니다.
+          let name = "확인불가";
+          // 적립 라인 위로 1~10줄을 훑으며 가장 그럴싸한 가맹점명을 찾습니다.
           for (let j = 1; j <= 10; j++) {
             const cand = lines[i - j];
             if (!cand) continue;
-            // 날짜, 금액(원), 시간, 카드정보가 아닌 첫 번째 줄을 이름으로 채택
+            // 제외할 패턴들: 금액, 시간, 카드번호, 날짜
             if (!cand.includes("원") && !cand.includes(":") && !cand.includes("(") && !cand.match(/^\d{2}월\d{2}일/)) {
-              name = cand.trim();
+              name = cand.replace("KB Pay", "").trim();
               break;
             }
           }
           foundAny = true;
 
-          // 분류 로직 (주인님 맞춤형 키워드)
+          // 정밀 키워드 매칭
           if (["주유", "SK", "GS", "오일"].some(k => name.includes(k))) parsed.gas.push({ name, amount });
           else if (["이마트", "홈플러스", "롯데마트", "하나로", "식자재"].some(k => name.includes(k))) parsed.mart.push({ name, amount });
           else if (["G마켓", "옥션", "11번가", "인터파크", "온스타일", "SSG"].some(k => name.includes(k))) parsed.shopping.push({ name, amount });
@@ -95,7 +94,7 @@ export default function App() {
     }
 
     if (!foundAny) {
-      setError("적립 내역이 분석되지 않았습니다. 복사한 내용을 확인해주세요.");
+      setError("적립 내역이 분석되지 않았습니다. 이용내역 전체를 복사했는지 확인해주세요.");
       return;
     }
 
@@ -109,10 +108,6 @@ export default function App() {
     const limit = TIER_LIMITS[result.tier || "40"][key];
     return acc + (limit ? Math.min(sum, limit) : sum);
   }, 0) : 0;
-
-  const chartData = result ? CATEGORIES.filter(c => result.totals[c.key]?.sum > 0).map(c => ({
-    name: c.label, value: result.totals[c.key].sum, color: c.color,
-  })) : [];
 
   return (
     <div style={{ minHeight: "100vh", background: "#0a0e1a", fontFamily: "'Noto Sans KR', sans-serif", color: "#e8eaf6" }}>
@@ -136,16 +131,11 @@ export default function App() {
       <div style={{ maxWidth: 620, margin: "0 auto", padding: "22px 16px 56px" }}>
         {mainTab === "input" && (
           <div>
-            {/* 🛠️ [복구] 달력 아이콘 + 월 선택 UI */}
-            <div style={{ marginBottom: 16, position: "relative" }}>
-              <div style={{ display: "flex", alignItems: "center", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 12, padding: "12px 16px", cursor: "pointer" }}>
-                <span style={{ marginRight: 10 }}>📅</span>
-                <select value={month} onChange={e => setMonth(e.target.value)} style={{ flex: 1, background: "transparent", border: "none", color: "#fff", fontSize: 16, outline: "none", appearance: "none", fontWeight: 500 }}>
-                  <option value="2026-03" style={{ background: "#0a0e1a" }}>2026년 3월</option>
-                  <option value="2026-02" style={{ background: "#0a0e1a" }}>2026년 2월</option>
-                  <option value="2026-01" style={{ background: "#0a0e1a" }}>2026년 1월</option>
-                </select>
-                <span style={{ fontSize: 12, opacity: 0.5 }}>▼</span>
+            {/* 🛠️ [복구] 달력 아이콘 + 다크 모드 월 선택 UI */}
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ position: "relative", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 12, padding: "12px 16px", display: "flex", alignItems: "center" }}>
+                <span style={{ marginRight: 10, fontSize: 18 }}>📅</span>
+                <input type="month" value={month} onChange={e => setMonth(e.target.value)} style={{ flex: 1, background: "transparent", border: "none", color: "#fff", fontSize: 16, outline: "none", colorScheme: "dark" }} />
               </div>
             </div>
 
@@ -156,7 +146,7 @@ export default function App() {
                 ))}
               </div>
               
-              {/* [수정] 한도 숫자 10,000 P 형식으로 정밀 표기 */}
+              {/* 🛠️ [수정] 한도 숫자 10,000 P 형식 표기 */}
               <div style={{ marginTop: 10, background: "rgba(255,255,255,0.03)", borderRadius: 10, padding: "14px", display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
                 {CATEGORIES.filter(c => c.key !== 'other').map(cat => (
                   <div key={cat.key} style={{ textAlign: "center", background: "rgba(255,255,255,0.04)", borderRadius: 8, padding: "8px" }}>
@@ -173,17 +163,18 @@ export default function App() {
           </div>
         )}
 
+        {/* [순정 복구] RESULT TAB */}
         {mainTab === "result" && result && (
           <div>
             <div style={{ background: "linear-gradient(135deg, #1a237e, #0d47a1)", borderRadius: 18, padding: "24px", marginBottom: 20 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div>
                    <div style={{ fontSize: 11, opacity: 0.5 }}>{result.month} · {result.tier}만 실적 기준</div>
-                   <div style={{ fontFamily: "'Bebas Neue'", fontSize: 46, color: "#FFD700" }}>{effectiveGrand.toLocaleString()}<span style={{ fontSize: 22 }}>P</span></div>
+                   <div style={{ fontFamily: "'Bebas Neue'", fontSize: 50, color: "#FFD700" }}>{effectiveGrand.toLocaleString()}<span style={{ fontSize: 24 }}>P</span></div>
                 </div>
               </div>
             </div>
-            {/* ... 결과 상세 UI ... */}
+            
             {CATEGORIES.map(cat => {
               const d = result.totals[cat.key];
               if (!d || d.sum === 0) return null;
@@ -192,10 +183,15 @@ export default function App() {
                 <div key={cat.key} style={{ background: "rgba(255,255,255,0.04)", borderRadius: 14, padding: "16px", marginBottom: 12 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
                     <span style={{ fontWeight: 600 }}>{cat.label}</span>
-                    <span style={{ fontFamily: "'Bebas Neue'", fontSize: 22, color: d.sum > (limit || Infinity) ? "#ff8a80" : cat.color }}>{Math.min(d.sum, limit || Infinity).toLocaleString()}P</span>
+                    <span style={{ fontFamily: "'Bebas Neue'", fontSize: 24, color: d.sum > (limit || Infinity) ? "#ff7b72" : cat.color }}>{Math.min(d.sum, limit || Infinity).toLocaleString()}P</span>
                   </div>
+                  {limit && (
+                    <div style={{ height: 6, background: "rgba(255,255,255,0.1)", borderRadius: 3, overflow: "hidden", marginBottom: 10 }}>
+                      <div style={{ height: "100%", width: `${Math.min((d.sum/limit)*100, 100)}%`, background: d.sum > limit ? "#ff7b72" : cat.color }} />
+                    </div>
+                  )}
                   {d.items.map((it, i) => (
-                    <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, opacity: 0.5, marginTop: 8 }}>
+                    <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, opacity: 0.6, marginTop: 8 }}>
                       <span>{it.name}</span><span>{it.amount.toLocaleString()}P</span>
                     </div>
                   ))}
