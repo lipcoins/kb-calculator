@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 
-// 1. 카테고리 정의 (순정 유지)
+// [순정 유지] 카테고리 정의
 const CATEGORIES = [
   { key: "gas",      label: "⛽ 주유소",       color: "#FF6B35" },
   { key: "mart",     label: "🛒 대형마트",      color: "#A78BFA" },
@@ -15,11 +15,11 @@ const CATEGORIES = [
 const ALL_KEYS = ["gas", "mart", "shopping", "telecom", "delivery", "water", "other"];
 
 const TIER_LIMITS = {
-  "40": { gas: 10000, mart: 15000, shopping: 15000, telecom: 10000, delivery: 10000, water: 10000, other: null },
-  "80": { gas: 20000, mart: 20000, shopping: 20000, telecom: 10000, delivery: 10000, water: 10000, other: null },
+  "40": { gas: 14000, mart: 15000, shopping: 15000, telecom: 10000, delivery: 10000, water: 10000, other: null },
+  "80": { gas: 24000, mart: 20000, shopping: 20000, telecom: 10000, delivery: 10000, water: 10000, other: null },
 };
 
-// 2. 보조 함수 (원본 데이터 빌드 로직 보존)
+// [순정 유지] 데이터 빌드 로직
 function buildTotals(parsed) {
   const totals = {};
   let grand = 0;
@@ -30,6 +30,21 @@ function buildTotals(parsed) {
     grand += sum;
   }
   return { totals, grand };
+}
+
+// [순정 유지] CSV 내보내기
+function exportCSV(result) {
+  const rows = [["월", "전월실적구간", "카테고리", "가맹점", "적립금(P)"]];
+  for (const cat of CATEGORIES) {
+    for (const item of result.totals[cat.key]?.items || []) {
+      rows.push([result.month, result.tier + "만이상", cat.label, item.name, item.amount]);
+    }
+  }
+  const csv = "\uFEFF" + rows.map(r => r.join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = `KB_Biz_Titanium_${result.month}.csv`; a.click();
 }
 
 function TabBtn({ active, onClick, children }) {
@@ -51,9 +66,11 @@ export default function App() {
   const [textInput, setTextInput] = useState("");
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
+  const [history, setHistory] = useState([]);
+  const [chartType, setChartType] = useState("pie");
   const [month, setMonth] = useState("2026-03");
 
-  // 🛠️ [실전 튜닝] 주인님의 데이터 형식을 100% 잡아내는 파싱 엔진
+  // 🛠️ [무결성 튜닝] 실전 텍스트를 분석하여 원본 parsed 구조로 반환
   const analyze = () => {
     if (!textInput.trim()) return;
     setError(null);
@@ -67,8 +84,8 @@ export default function App() {
         const amountMatch = lines[i].match(/([\d,]+)/);
         if (amountMatch) {
           const amount = parseInt(amountMatch[0].replace(/,/g, ""), 10);
-          
-          let name = "확인불가 가맹점";
+          let name = "가맹점명 확인불가";
+          // 위로 최대 10줄을 훑으며 가맹점명 추출
           for (let j = 1; j <= 10; j++) {
             const cand = lines[i - j];
             if (!cand) continue;
@@ -81,9 +98,9 @@ export default function App() {
 
           if (["주유", "SK", "GS", "오일"].some(k => name.includes(k))) parsed.gas.push({ name, amount });
           else if (["이마트", "홈플러스", "롯데마트", "하나로", "식자재"].some(k => name.includes(k))) parsed.mart.push({ name, amount });
-          else if (["G마켓", "옥션", "11번가", "인터파크", "온스타일", "SSG", "쇼핑"].some(k => name.includes(k))) parsed.shopping.push({ name, amount });
+          else if (["G마켓", "옥션", "11번가", "인터파크", "온스타일", "SSG", "신세계"].some(k => name.includes(k))) parsed.shopping.push({ name, amount });
           else if (["브로드밴드", "LiivM", "LGUPLUS", "LG유플", "SKT", "KT"].some(k => name.includes(k))) parsed.telecom.push({ name, amount });
-          else if (["우아한형", "배달의민족", "마켓컬리"].some(k => name.includes(k))) parsed.delivery.push({ name, amount });
+          else if (["우아한형", "배달의민족", "배민", "마켓컬리"].some(k => name.includes(k))) parsed.delivery.push({ name, amount });
           else if (name.toLowerCase().includes("coway") || name.includes("코웨이")) parsed.water.push({ name, amount });
           else parsed.other.push({ name, amount });
         }
@@ -91,7 +108,7 @@ export default function App() {
     }
 
     if (!foundAny) {
-      setError("적립 내역이 없습니다. 내용을 확인해주세요.");
+      setError("적립 내역이 분석되지 않았습니다. 복사한 내용을 확인해주세요.");
       return;
     }
 
@@ -100,22 +117,35 @@ export default function App() {
     setMainTab("result");
   };
 
+  const saveHistory = () => {
+    if (!result) return;
+    setHistory(prev => [{ ...result }, ...prev.filter(h => h.month !== result.month)]);
+    alert("저장 완료!");
+  };
+
   const effectiveGrand = result ? ALL_KEYS.reduce((acc, key) => {
     const sum = result.totals[key]?.sum || 0;
     const limit = TIER_LIMITS[result.tier || "40"][key];
     return acc + (limit ? Math.min(sum, limit) : sum);
   }, 0) : 0;
 
+  const chartData = result ? CATEGORIES.filter(c => result.totals[c.key]?.sum > 0).map(c => ({
+    name: c.label, value: result.totals[c.key].sum, color: c.color,
+  })) : [];
+
   return (
     <div style={{ minHeight: "100vh", background: "#0a0e1a", fontFamily: "'Noto Sans KR', sans-serif", color: "#e8eaf6" }}>
       <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=Bebas+Neue&display=swap" rel="stylesheet" />
 
-      {/* Header */}
+      {/* [순정] Header */}
       <div style={{ background: "linear-gradient(135deg, #1a237e 0%, #0d47a1 60%, #01579b 100%)", padding: "22px 20px 0", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
         <div style={{ maxWidth: 620, margin: "0 auto" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18 }}>
             <div style={{ background: "linear-gradient(135deg, #FFD700, #FFA000)", borderRadius: 10, padding: "7px 13px", fontFamily: "'Bebas Neue'", fontSize: 19, color: "#0a0e1a", letterSpacing: 1 }}>KB</div>
-            <div style={{ fontFamily: "'Bebas Neue'", fontSize: 21, letterSpacing: 2.5, color: "#fff" }}>BIZ TITANIUM</div>
+            <div>
+              <div style={{ fontFamily: "'Bebas Neue'", fontSize: 21, letterSpacing: 2.5, color: "#fff" }}>BIZ TITANIUM</div>
+              <div style={{ fontSize: 10, color: "rgba(255,255,255,0.55)", letterSpacing: 1.5 }}>적립금 계산기</div>
+            </div>
           </div>
           <div style={{ display: "flex" }}>
             {[["input", "✏️ 입력"], ["result", "📊 결과"], ["history", "📅 히스토리"]].map(([k, l]) => (
@@ -128,15 +158,15 @@ export default function App() {
       <div style={{ maxWidth: 620, margin: "0 auto", padding: "22px 16px 56px" }}>
         {mainTab === "input" && (
           <div>
-            {/* 🛠️ [복구] 달력 아이콘 + 다크 모드 월 선택 UI */}
+            {/* 🛠️ [복구] 달력 아이콘 + 다크 테마 월 선택 UI */}
             <div style={{ marginBottom: 16 }}>
-              <div style={{ position: "relative", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 12, padding: "12px 16px", display: "flex", alignItems: "center" }}>
+              <div style={{ position: "relative", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 12, padding: "12px 16px", display: "flex", alignItems: "center", cursor: "pointer" }}>
                 <span style={{ marginRight: 12, fontSize: 18 }}>📅</span>
                 <input 
                   type="month" 
                   value={month} 
                   onChange={e => setMonth(e.target.value)} 
-                  style={{ flex: 1, background: "transparent", border: "none", color: "#fff", fontSize: 16, outline: "none", colorScheme: "dark" }} 
+                  style={{ flex: 1, background: "transparent", border: "none", color: "#fff", fontSize: 16, outline: "none", colorScheme: "dark", cursor: "pointer" }} 
                 />
               </div>
             </div>
@@ -165,6 +195,7 @@ export default function App() {
           </div>
         )}
 
+        {/* [순정 복구] RESULT TAB - 원본 이미지의 그 상세 UI 로직 그대로 */}
         {mainTab === "result" && result && (
           <div>
             <div style={{ background: "linear-gradient(135deg, #1a237e, #0d47a1)", borderRadius: 18, padding: "24px", marginBottom: 20 }}>
@@ -173,9 +204,23 @@ export default function App() {
                    <div style={{ fontSize: 11, opacity: 0.5 }}>{result.month} · {result.tier}만 실적 기준</div>
                    <div style={{ fontFamily: "'Bebas Neue'", fontSize: 50, color: "#FFD700" }}>{effectiveGrand.toLocaleString()}<span style={{ fontSize: 24 }}>P</span></div>
                 </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={saveHistory} style={{ padding: "8px 14px", borderRadius: 10, background: "rgba(255,215,0,0.08)", color: "#FFD700", border: "1px solid rgba(255,215,0,0.35)", fontSize: 12, cursor: "pointer" }}>💾 저장</button>
+                  <button onClick={() => exportCSV(result)} style={{ padding: "8px 14px", borderRadius: 10, background: "rgba(78,205,196,0.08)", color: "#4ECDC4", border: "1px solid rgba(78,205,196,0.35)", fontSize: 12, cursor: "pointer" }}>📥 CSV</button>
+                </div>
               </div>
             </div>
-            {/* 결과 상세는 기존 주인님의 완벽한 UI 로직을 그대로 사용합니다 */}
+
+            <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 16, padding: 20, marginBottom: 20 }}>
+              <ResponsiveContainer width="100%" height={220}>
+                {chartType === "pie" ? (
+                  <PieChart><Pie data={chartData} cx="50%" cy="50%" innerRadius={60} outerRadius={90} dataKey="value">{chartData.map((e, i) => <Cell key={i} fill={e.color} />)}</Pie><Tooltip /></PieChart>
+                ) : (
+                  <BarChart data={chartData}><XAxis dataKey="name" tick={{ fontSize: 10, fill: "#fff" }} /><YAxis /><Bar dataKey="value">{chartData.map((e, i) => <Cell key={i} fill={e.color} />)}</Bar></BarChart>
+                )}
+              </ResponsiveContainer>
+            </div>
+            
             {CATEGORIES.map(cat => {
               const d = result.totals[cat.key];
               if (!d || d.sum === 0) return null;
